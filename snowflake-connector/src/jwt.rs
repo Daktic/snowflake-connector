@@ -29,26 +29,56 @@ pub fn create_token<P: AsRef<Path>>(
         .map_err(KeyPairError::KayPairGeneration)
 }
 
-fn get_private_key<P: AsRef<Path>>(path: P) -> Result<String, KeyPairError> {
-    std::fs::read_to_string(&path)
-        .map_err(|e| {
-            KeyPairError::PrivateKeyRead(e, if let Some(path) = path.as_ref().to_str() {
-                path
-            } else {
-                "N/A"
-            }.into())
-        })
+fn get_private_key<P: AsRef<Path> + Copy>(path: Option<P>) -> Result<String, KeyPairError> where String: From<P> {
+    if let Some(path) = path {
+        std::fs::read_to_string(&path)
+            .map_err(|e| {
+                KeyPairError::PrivateKeyRead(e, if let Some(path) = path.as_ref().to_str() {
+                    path
+                } else {
+                    "N/A"
+                }.into())
+            })
+    } else {
+        let private_key_path = find_file_in_directory("rsa_key.p8", None).unwrap();
+        std::fs::read_to_string(&private_key_path)
+            .map_err(|e| KeyPairError::PrivateKeyRead(e, private_key_path.to_string_lossy().to_string()))
+    }
 }
 
-fn get_public_key<P: AsRef<Path>>(path: P) -> Result<String, KeyPairError> {
-    std::fs::read_to_string(&path)
-        .map_err(|e| {
-            KeyPairError::PublicKeyRead(e, if let Some(path) = path.as_ref().to_str() {
-                path
-            } else {
-                "N/A"
-            }.into())
-        })
+fn get_public_key<P: AsRef<Path> + Copy>(path: Option<P>) -> Result<String, KeyPairError> {
+    if let Some(path) = path {
+        std::fs::read_to_string(&path)
+            .map_err(|e| {
+                KeyPairError::PublicKeyRead(e, if let Some(path) = path.as_ref().to_str() {
+                    path
+                } else {
+                    "N/A"
+                }.into())
+            })
+    } else {
+        let public_key_path = find_file_in_directory("rsa_key.p8", None).unwrap();
+        std::fs::read_to_string(&public_key_path)
+            .map_err(|e| KeyPairError::PublicKeyRead(e, public_key_path.to_string_lossy().to_string()))
+    }
+}
+
+fn find_file_in_directory(file_name: &str, directory:Option<&Path>) -> Option<PathBuf> {
+    let directory_root = env::current_dir().unwrap();
+    let current_directory = directory.unwrap_or(&directory_root);
+    for entry in std::fs::read_dir(current_directory).ok()? {
+        let entry = entry.ok()?;
+        let path = entry.path();
+
+        if path.is_dir() {
+            if let Some(found) = find_file_in_directory(file_name, Some(&path)) {
+                return Some(found);
+            }
+        } else if path.file_name().and_then(|n| n.to_str()) == Some(file_name) {
+            return Some(path);
+        }
+    }
+    None
 }
 
 #[derive(thiserror::Error, Debug)]
